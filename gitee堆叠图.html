@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生成绩数据</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        select,
+        button {
+            margin: 10px 0;
+        }
+
+        #chart {
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+</head>
+
+<body>
+    <h1>学生成绩数据</h1>
+
+    <label for="gradeFilter">选择年级:</label>
+    <select id="gradeFilter">
+        <option value="all">所有年级</option>
+    </select>
+
+    <label for="classFilter">选择班级:</label>
+    <select id="classFilter">
+        <option value="all">所有班级</option>
+    </select>
+
+    <label for="studentFilter">选择学生:</label>
+    <select id="studentFilter">
+        <option value="all">所有学生</option>
+    </select>
+
+    <label for="scoreFilter">选择总分:</label>
+    <select id="scoreFilter">
+        <option value="0">所有总分</option>
+        <option value="300">大于 300</option>
+        <option value="400">大于 400</option>
+        <option value="500">大于 500</option>
+    </select>
+
+    <button id="filterButton">应用筛选</button>
+
+    <div id="data-display"></div>
+    <div id="chart"></div>
+
+    <script>
+        let data = []; // 全局数据变量
+
+        // 加载 JSON 数据
+        async function loadData() {
+            try {
+                const url = `https://gitee.com/api/v5/repos/dingfengboss/data/contents/data.json`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error('网络响应不正常');
+                }
+
+                const jsonData = await response.json();
+                const base64Content = jsonData.content;
+                const decodedContent = decodeURIComponent(escape(atob(base64Content))); // 解码并处理中文
+
+                try {
+                    const arrayData = JSON.parse(decodedContent);
+                    data = arrayData; // 将全局变量 data 赋值为解析后的数组
+                    console.log(arrayData); // 现在 arrayData 是一个数组
+                    populateGradeFilter(data); // 填充年级下拉列表
+                    displayData(data); // 初始显示所有数据
+                    renderChart(data); // 渲染初始图表
+                } catch (error) {
+                    console.error('解析 JSON 时出错:', error.message);
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // 填充年级下拉列表
+        function populateGradeFilter(data) {
+            const gradeFilter = document.getElementById('gradeFilter');
+            const uniqueGrades = [...new Set(data.map(item => item.年级))]; // 获取唯一年级
+
+            uniqueGrades.forEach(grade => {
+                const option = document.createElement('option');
+                option.value = grade;
+                option.textContent = grade;
+                gradeFilter.appendChild(option);
+            });
+
+            gradeFilter.addEventListener('change', () => {
+                populateClassFilter(data); // 更新班级下拉列表
+                populateStudentFilter(data); // 更新学生下拉列表
+            });
+        }
+
+        // 填充班级下拉列表
+        function populateClassFilter(data) {
+            const classFilter = document.getElementById('classFilter');
+            const selectedGrade = document.getElementById('gradeFilter').value;
+
+            // 清空班级下拉列表
+            classFilter.innerHTML = '<option value="all">所有班级</option>';
+            const filteredClasses = [...new Set(data.filter(item => selectedGrade === 'all' || item.年级 === selectedGrade).map(item => item.班级))];
+
+            filteredClasses.forEach(cls => {
+                const option = document.createElement('option');
+                option.value = cls;
+                option.textContent = cls;
+                classFilter.appendChild(option);
+            });
+
+            classFilter.addEventListener('change', () => {
+                populateStudentFilter(data); // 更新学生下拉列表
+            });
+        }
+
+        // 填充学生下拉列表
+        function populateStudentFilter(data) {
+            const studentFilter = document.getElementById('studentFilter');
+            const selectedGrade = document.getElementById('gradeFilter').value;
+            const selectedClass = document.getElementById('classFilter').value;
+
+            // 清空学生下拉列表
+            studentFilter.innerHTML = '<option value="all">所有学生</option>';
+            const filteredStudents = [...new Set(data.filter(item =>
+                (selectedGrade === 'all' || item.年级 === selectedGrade) &&
+                (selectedClass === 'all' || item.班级 === selectedClass)
+            ).map(item => item.姓名))];
+
+            filteredStudents.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                studentFilter.appendChild(option);
+            });
+        }
+
+        function displayData(filteredData) {
+            let display = '<ul>';
+            filteredData.forEach(item => {
+                display += `<li>${item.姓名} - 总分: ${item.总分_得分}</li>`;
+            });
+            display += '</ul>';
+            document.getElementById('data-display').innerHTML = display;
+            renderChart(filteredData); // 更新图表
+        }
+
+        function filterData() {
+            const selectedGrade = document.getElementById('gradeFilter').value;
+            const selectedClass = document.getElementById('classFilter').value;
+            const selectedStudent = document.getElementById('studentFilter').value;
+            const selectedScore = parseInt(document.getElementById('scoreFilter').value);
+            let filteredData = data;
+
+            if (selectedGrade !== 'all') {
+                filteredData = filteredData.filter(item => item.年级 === selectedGrade);
+            }
+
+            if (selectedClass !== 'all') {
+                filteredData = filteredData.filter(item => item.班级 === selectedClass);
+            }
+
+            if (selectedStudent !== 'all') {
+                filteredData = filteredData.filter(item => item.姓名 === selectedStudent);
+            }
+
+            if (selectedScore > 0) {
+                filteredData = filteredData.filter(item => parseInt(item["总分_得分"]) > selectedScore);
+            }
+
+            displayData(filteredData); // 更新显示
+        }
+
+        function updateDimensions(selectedClass) {
+            console.log(selectedClass);
+            if (selectedClass === "1班") {
+                return ["考次", "语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "生物_得分", "总分_得分"];
+            } else if (selectedClass === "2班") {
+                return ["考次", "语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "政治_得分", "总分_得分"];
+            }else if (selectedClass === "3班") {
+                return ["考次", "语文_得分", "数学_得分", "英语_得分", "历史_得分", "政治_得分", "地理_得分", "总分_得分"];
+            }
+        };
+        function series_name(selectedClass) {
+            console.log(selectedClass);
+            if (selectedClass === "1班") {
+                return ["语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "生物_得分", "总分_得分"];
+            } else if (selectedClass === "2班") {
+                return ["语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "政治_得分", "总分_得分"];
+            }else if (selectedClass === "3班") {
+                return ["语文_得分", "数学_得分", "英语_得分", "历史_得分", "政治_得分", "地理_得分", "总分_得分"];
+            }
+        }
+        
+        //const dimensions = ["考次", "语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "生物_得分", "总分_得分"]
+        //const series_name = ["语文_得分", "数学_得分", "英语_得分", "物理_得分", "化学_得分", "生物_得分", "总分_得分"]
+        function renderChart(filteredData) {
+            const chartDom = document.getElementById('chart');
+            const myChart = echarts.init(chartDom);
+            const myData = filteredData;
+            const fieldNames = Object.keys(myData[0]);
+
+            myChart.clear();
+
+            const selectedClass = document.getElementById('classFilter').value;
+            const updatedDimensions = updateDimensions(selectedClass)
+            const updatedSeries_name = series_name(selectedClass)
+            if (filteredData.length === 0) {
+                myChart.setOption({
+                    title: {
+                        text: "无数据",
+                        subtext: "",
+                        top: 10,
+                        left: 10,
+                    },
+                    series: []
+                });
+                return;
+            }
+            const option = {
+                title: {
+                    text: filteredData[0]["姓名"],
+                    subtext: "历史成绩堆叠图",
+                    top: 10,
+                    left: 10,
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'shadow'
+                    }
+                },
+                legend: {
+                    data: updatedSeries_name,
+                    bottom: 'bottom'
+                },
+                toolbox: {
+                    show: true,
+                    orient: 'vertical',
+                    left: 'right',
+                    top: 'center',
+                    feature: {
+                        mark: { show: true },
+                        dataView: { show: true, readOnly: false },
+                        magicType: { show: true, type: ['line', 'bar', 'stack'] },
+                        restore: { show: true },
+                        saveAsImage: { show: true }
+                    }
+                },
+                dataset: {
+                    dimensions: updatedDimensions,
+                    source: myData
+                },
+                //数据选择包含x，y；其中y可以是多个的。
+                series: (function () {
+                    var series = [];
+                    for (i = 1; i <= 7; i++) {
+                        j = i + 4
+                        var sname = updatedDimensions[i]
+                        //params是从dimensions中的1toEnd。
+                        if (sname === '总分_得分') {
+                            series.push({
+                                type: 'bar',
+                                barGap: 0,
+                                stack: 'bar',
+                                barWidth: 20,
+                                emphasis: { focus: 'series' },
+                                label: {
+                                    show: true,
+                                    position: "top",
+                                    formatter: function (params) {
+                                        var a = params.dimensionNames[params.encode.y[0]]
+                                        return `${params.dimensionNames[params.encode.y[0]]}: ${params.value[params.dimensionNames[params.encode.y[0]]]}`; // 正确显示
+                                    }
+                                }
+                            })
+                        } else {
+                            series.push({
+                                type: 'bar',
+                                emphasis: { focus: 'series' },
+                                label: {
+                                    show: true,
+                                    position: "insideTop",
+                                    formatter: function (params) {
+                                        var a = params.dimensionNames[params.encode.y[0]]
+                                        return `${params.dimensionNames[params.encode.y[0]]}: ${params.value[params.dimensionNames[params.encode.y[0]]]}`; // 正确显示
+                                    }
+                                },
+                                stack: 'line',
+                            })
+                        }
+                    };
+                    return series;
+                })(),
+                xAxis: { type: 'category' },
+                yAxis: {},
+            };
+
+            myChart.setOption(option);
+        }
+
+        document.getElementById('filterButton').addEventListener('click', filterData); // 绑定点击事件
+
+        loadData(); // 初始加载数据
+    </script>
+</body>
+
+</html>
